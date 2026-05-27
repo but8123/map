@@ -399,7 +399,7 @@ def road_shortest_path(G, olat, olon, dlat, dlon):
 # ─────────────────────────────────────────
 def render_category_buttons():
 
-    cols = st.columns(3)
+    cols = st.columns(2)
 
     labels = {
         "의료": "🔵 🏥 의료",
@@ -411,7 +411,7 @@ def render_category_buttons():
 
     for i, cat in enumerate(ALL_CATS):
 
-        with cols[i % 3]:
+        with cols[i % 2]:
 
             active = cat in st.session_state.active_cats
 
