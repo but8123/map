@@ -116,12 +116,8 @@ div[data-testid="stButton"] > button {
         font-size: 14px;
     }
 }
-</style>
 
-st.markdown("""
-<style>
-
-/* 선택 안된 상태 */
+/* pills 버튼 색상 */
 button[data-baseweb="tag"] {
     border-radius: 999px !important;
     font-weight: 700 !important;
@@ -159,10 +155,28 @@ button[data-baseweb="tag"]:nth-child(5) {
     color: #dc2626 !important;
 }
 
+@media (max-width: 768px) {
+    .block-container {
+        padding-left: 0.7rem;
+        padding-right: 0.7rem;
+        padding-top: 0.8rem;
+    }
+
+    section[data-testid="column"]:first-child > div {
+        padding: 2px;
+    }
+
+    .rank-card {
+        padding: 10px 11px;
+    }
+
+    .rank-dist {
+        font-size: 14px;
+    }
+}
 </style>
 """, unsafe_allow_html=True)
 
-""", unsafe_allow_html=True)
 
 CATEGORY_MAP = {
     "hospital": "의료", "clinic": "의료",
