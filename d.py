@@ -1,6 +1,5 @@
 import json
 import math
-import urllib.parse
 import streamlit as st
 import folium
 from streamlit_folium import st_folium
@@ -8,6 +7,9 @@ from streamlit_js_eval import get_geolocation
 import osmnx as ox
 import networkx as nx
 
+# ─────────────────────────────────────────
+# 페이지 설정
+# ─────────────────────────────────────────
 st.set_page_config(
     page_title="원주 생활 인프라 탐색",
     page_icon="🗺️",
@@ -18,11 +20,22 @@ st.set_page_config(
 # 상수
 # ─────────────────────────────────────────
 CATEGORY_MAP = {
-    "hospital": "의료", "clinic": "의료",
-    "townhall": "행정", "government": "행정",
-    "school": "교육", "university": "교육", "college": "교육",
-    "library": "공공시설", "park": "공공시설", "sports_centre": "공공시설",
-    "police": "안전", "fire_station": "안전",
+    "hospital": "의료",
+    "clinic": "의료",
+
+    "townhall": "행정",
+    "government": "행정",
+
+    "school": "교육",
+    "university": "교육",
+    "college": "교육",
+
+    "library": "공공시설",
+    "park": "공공시설",
+    "sports_centre": "공공시설",
+
+    "police": "안전",
+    "fire_station": "안전",
 }
 
 COLORS = {
@@ -31,14 +44,6 @@ COLORS = {
     "교육": "#f97316",
     "공공시설": "#22c55e",
     "안전": "#ef4444",
-}
-
-LIGHT_COLORS = {
-    "의료": "#dbeafe",
-    "행정": "#f3e8ff",
-    "교육": "#ffedd5",
-    "공공시설": "#dcfce7",
-    "안전": "#fee2e2",
 }
 
 EMOJIS = {
@@ -50,6 +55,7 @@ EMOJIS = {
 }
 
 ALL_CATS = ["의료", "행정", "교육", "공공시설", "안전"]
+
 WALK_SPEED = 80
 
 # ─────────────────────────────────────────
@@ -57,33 +63,26 @@ WALK_SPEED = 80
 # ─────────────────────────────────────────
 st.markdown("""
 <style>
+
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap');
 
 html, body, [class*="css"] {
     font-family: 'Noto Sans KR', sans-serif;
 }
 
-.stApp { background: #f5f6fa; }
+.stApp {
+    background: #f5f6fa;
+}
+
+#MainMenu, header, footer {
+    visibility: hidden;
+}
 
 section[data-testid="column"]:first-child > div {
     background: white;
     border-radius: 16px;
-    padding: 4px;
+    padding: 10px;
 }
-
-#MainMenu, header, footer { visibility: hidden; }
-
-.status-box {
-    border-radius: 12px;
-    padding: 14px 16px;
-    margin: 12px 0;
-    font-size: 13px;
-    line-height: 1.7;
-}
-
-.status-idle    { background:#f1f5f9; color:#64748b; border:1px dashed #cbd5e1; }
-.status-pending { background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; }
-.status-done    { background:#f0fdf4; color:#166534; border:1px solid #bbf7d0; }
 
 .section-title {
     font-size: 12px;
@@ -94,27 +93,30 @@ section[data-testid="column"]:first-child > div {
     margin: 18px 0 8px 2px;
 }
 
-.category-wrap {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 4px;
+.status-box {
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin: 12px 0;
+    font-size: 13px;
+    line-height: 1.7;
 }
 
-.category-btn {
-    display: inline-block;
-    padding: 8px 15px;
-    border-radius: 999px;
-    font-size: 14px;
-    font-weight: 700;
-    text-decoration: none !important;
-    border: 1.7px solid;
-    transition: all 0.15s ease;
+.status-idle {
+    background:#f1f5f9;
+    color:#64748b;
+    border:1px dashed #cbd5e1;
 }
 
-.category-btn:hover {
-    transform: translateY(-1px);
-    filter: brightness(0.98);
+.status-pending {
+    background:#eff6ff;
+    color:#1d4ed8;
+    border:1px solid #bfdbfe;
+}
+
+.status-done {
+    background:#f0fdf4;
+    color:#166534;
+    border:1px solid #bbf7d0;
 }
 
 .rank-card {
@@ -150,36 +152,45 @@ section[data-testid="column"]:first-child > div {
 .b2{background:#94a3b8;}
 .b3{background:#92400e;}
 
-.rank-name  { font-size:13px; font-weight:700; color:#111827; }
-.rank-meta  { font-size:11px; color:#9ca3af; margin-top:1px; }
-.rank-right { margin-left:auto; text-align:right; }
-.rank-dist  { font-size:16px; font-weight:700; color:#4361ee; }
-.rank-time  { font-size:11px; color:#9ca3af; }
+.rank-name {
+    font-size:13px;
+    font-weight:700;
+    color:#111827;
+}
+
+.rank-meta {
+    font-size:11px;
+    color:#9ca3af;
+    margin-top:1px;
+}
+
+.rank-right {
+    margin-left:auto;
+    text-align:right;
+}
+
+.rank-dist {
+    font-size:16px;
+    font-weight:700;
+    color:#4361ee;
+}
+
+.rank-time {
+    font-size:11px;
+    color:#9ca3af;
+}
 
 div[data-testid="stButton"] > button {
-    border-radius: 10px;
-    font-family: 'Noto Sans KR', sans-serif;
-    font-weight: 600;
+    border-radius: 999px;
+    font-weight: 700;
 }
 
 @media (max-width: 768px) {
+
     .block-container {
         padding-left: 0.7rem;
         padding-right: 0.7rem;
         padding-top: 0.8rem;
-    }
-
-    section[data-testid="column"]:first-child > div {
-        padding: 2px;
-    }
-
-    .category-wrap {
-        gap: 7px;
-    }
-
-    .category-btn {
-        padding: 7px 13px;
-        font-size: 13px;
     }
 
     .rank-card {
@@ -190,11 +201,12 @@ div[data-testid="stButton"] > button {
         font-size: 14px;
     }
 }
+
 </style>
 """, unsafe_allow_html=True)
 
 # ─────────────────────────────────────────
-# 함수
+# 유틸 함수
 # ─────────────────────────────────────────
 def meters_to_time(m):
     mins = max(1, round(m / WALK_SPEED))
@@ -209,7 +221,19 @@ def is_mobile_device():
         return False
 
 
+def reset_location():
+    st.session_state.confirmed_lat = None
+    st.session_state.confirmed_lon = None
+    st.session_state.pending_lat = None
+    st.session_state.pending_lon = None
+    st.session_state.results = []
+
+
+# ─────────────────────────────────────────
+# 세션 초기화
+# ─────────────────────────────────────────
 def init_session():
+
     defaults = {
         "confirmed_lat": None,
         "confirmed_lon": None,
@@ -226,37 +250,26 @@ def init_session():
 
 init_session()
 
-
-# 카테고리 버튼 클릭 처리
-if "cat" in st.query_params:
-    cat = st.query_params["cat"]
-
-    if cat in ALL_CATS:
-        if cat in st.session_state.active_cats:
-            st.session_state.active_cats.remove(cat)
-        else:
-            st.session_state.active_cats.add(cat)
-
-        st.session_state.results = []
-
-    st.query_params.clear()
-    st.rerun()
-
-
+# ─────────────────────────────────────────
+# 데이터 로딩
+# ─────────────────────────────────────────
 @st.cache_data
 def load_facilities():
+
     with open("data.geojson", encoding="utf-8") as f:
         geojson = json.load(f)
 
     result = []
 
     for feature in geojson["features"]:
+
         props = feature["properties"]
         geometry = feature["geometry"]
 
         category = None
 
         for key in ["amenity", "leisure", "office", "building"]:
+
             v = props.get(key, "")
 
             if v in CATEGORY_MAP:
@@ -301,20 +314,29 @@ def load_facilities():
 
 @st.cache_resource(show_spinner="🗺️ 도로망 로딩 중…")
 def load_graph():
+
     try:
         return ox.load_graphml("wonju_walk.graphml")
+
     except Exception:
+
         G = ox.graph_from_point(
             (37.3334, 127.9300),
             dist=6000,
             network_type="walk",
             simplify=True,
         )
+
         ox.save_graphml(G, "wonju_walk.graphml")
+
         return G
 
 
+# ─────────────────────────────────────────
+# 거리 계산
+# ─────────────────────────────────────────
 def haversine(lat1, lon1, lat2, lon2):
+
     R = 6371000
 
     dlat = math.radians(lat2 - lat1)
@@ -331,23 +353,39 @@ def haversine(lat1, lon1, lat2, lon2):
 
 
 def road_shortest_path(G, olat, olon, dlat, dlon):
+
     try:
         orig = ox.nearest_nodes(G, olon, olat)
         dest = ox.nearest_nodes(G, dlon, dlat)
 
-        nodes = nx.shortest_path(G, orig, dest, weight="length")
-        coords = [(G.nodes[n]["y"], G.nodes[n]["x"]) for n in nodes]
+        nodes = nx.shortest_path(
+            G,
+            orig,
+            dest,
+            weight="length"
+        )
+
+        coords = [
+            (G.nodes[n]["y"], G.nodes[n]["x"])
+            for n in nodes
+        ]
 
         dist = 0
 
         for i in range(len(nodes) - 1):
-            edge_data = G.get_edge_data(nodes[i], nodes[i + 1])
+
+            edge_data = G.get_edge_data(
+                nodes[i],
+                nodes[i + 1]
+            )
 
             if edge_data:
+
                 min_edge = min(
                     edge_data.values(),
                     key=lambda x: x.get("length", 0)
                 )
+
                 dist += min_edge.get("length", 0)
 
         return coords, round(dist)
@@ -356,51 +394,45 @@ def road_shortest_path(G, olat, olon, dlat, dlon):
         return None, None
 
 
-def reset_location():
-    st.session_state.confirmed_lat = None
-    st.session_state.confirmed_lon = None
-    st.session_state.pending_lat = None
-    st.session_state.pending_lon = None
-    st.session_state.results = []
-
-
+# ─────────────────────────────────────────
+# 카테고리 버튼
+# ─────────────────────────────────────────
 def render_category_buttons():
-    html = '<div class="category-wrap">'
 
-    for cat in ALL_CATS:
-        active = cat in st.session_state.active_cats
-        color = COLORS[cat]
-        light = LIGHT_COLORS[cat]
+    cols = st.columns(3)
 
-        if active:
-            bg = light
-            text_color = color
-            border = color
-            opacity = "1"
-        else:
-            bg = "#f3f4f6"
-            text_color = "#9ca3af"
-            border = "#d1d5db"
-            opacity = "0.65"
+    labels = {
+        "의료": "🔵 🏥 의료",
+        "행정": "🟣 🏛️ 행정",
+        "교육": "🟠 🏫 교육",
+        "공공시설": "🟢 🏟️ 공공시설",
+        "안전": "🔴 🚒 안전",
+    }
 
-        encoded_cat = urllib.parse.quote(cat)
+    for i, cat in enumerate(ALL_CATS):
 
-        html += f"""
-        <a class="category-btn"
-           href="?cat={encoded_cat}"
-           style="
-               background:{bg};
-               color:{text_color};
-               border-color:{border};
-               opacity:{opacity};
-           ">
-           {EMOJIS[cat]} {cat}
-        </a>
-        """
+        with cols[i % 3]:
 
-    html += "</div>"
+            active = cat in st.session_state.active_cats
 
-    st.markdown(html, unsafe_allow_html=True)
+            if active:
+                label = labels[cat]
+            else:
+                label = f"⚪ {EMOJIS[cat]} {cat}"
+
+            if st.button(
+                label,
+                key=f"cat_btn_{cat}",
+                use_container_width=True
+            ):
+
+                if cat in st.session_state.active_cats:
+                    st.session_state.active_cats.remove(cat)
+                else:
+                    st.session_state.active_cats.add(cat)
+
+                st.session_state.results = []
+                st.rerun()
 
 
 # ─────────────────────────────────────────
@@ -410,15 +442,26 @@ facilities = load_facilities()
 
 left_col, map_col = st.columns([1, 2.8])
 
+# ─────────────────────────────────────────
+# 왼쪽 패널
+# ─────────────────────────────────────────
 with left_col:
+
     st.markdown("## 🗺️ 인프라 탐색")
 
-    st.markdown('<div class="section-title">카테고리</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-title">카테고리</div>',
+        unsafe_allow_html=True
+    )
+
     render_category_buttons()
 
     selected_cats = st.session_state.active_cats
 
-    st.markdown('<div class="section-title">탐색 반경</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-title">탐색 반경</div>',
+        unsafe_allow_html=True
+    )
 
     radius = st.slider(
         "반경",
@@ -441,7 +484,10 @@ with left_col:
         unsafe_allow_html=True
     )
 
-    st.markdown('<div class="section-title">위치</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-title">위치</div>',
+        unsafe_allow_html=True
+    )
 
     can_select_location = (
         st.session_state.pending_lat is None
@@ -449,45 +495,72 @@ with left_col:
     )
 
     if can_select_location:
-        if st.button("📱 현재 내 위치 사용", use_container_width=True, type="primary"):
+
+        if st.button(
+            "📱 현재 내 위치 사용",
+            use_container_width=True,
+            type="primary"
+        ):
+
             loc = get_geolocation()
 
             if loc and "coords" in loc:
-                st.session_state.pending_lat = round(loc["coords"]["latitude"], 6)
-                st.session_state.pending_lon = round(loc["coords"]["longitude"], 6)
+
+                st.session_state.pending_lat = round(
+                    loc["coords"]["latitude"],
+                    6
+                )
+
+                st.session_state.pending_lon = round(
+                    loc["coords"]["longitude"],
+                    6
+                )
+
                 st.session_state.results = []
+
                 st.rerun()
+
             else:
-                st.warning("위치 정보를 가져오지 못했습니다. 브라우저 위치 권한을 허용해주세요.")
+                st.warning(
+                    "위치 정보를 가져오지 못했습니다. 브라우저 위치 권한을 허용해주세요."
+                )
+
     else:
+
         st.button(
             "📱 현재 내 위치 사용",
             use_container_width=True,
-            disabled=True,
-            help="다시 선택하려면 초기화를 눌러주세요."
+            disabled=True
         )
 
     if st.session_state.pending_lat and not st.session_state.confirmed_lat:
+
         st.markdown(f"""
         <div class="status-box status-pending">
             🔵 <b>선택한 위치</b><br>
             위도 {st.session_state.pending_lat:.5f}<br>
             경도 {st.session_state.pending_lon:.5f}<br>
-            <span style="font-size:12px">지도 아래 확정 버튼을 눌러주세요</span>
+            <span style="font-size:12px">
+            지도 아래 확정 버튼을 눌러주세요
+            </span>
         </div>
         """, unsafe_allow_html=True)
 
     elif st.session_state.confirmed_lat:
+
         st.markdown(f"""
         <div class="status-box status-done">
             ✅ <b>확정 위치</b><br>
             위도 {st.session_state.confirmed_lat:.5f}<br>
             경도 {st.session_state.confirmed_lon:.5f}<br>
-            <span style="font-size:12px">다시 선택하려면 초기화를 눌러주세요</span>
+            <span style="font-size:12px">
+            다시 선택하려면 초기화를 눌러주세요
+            </span>
         </div>
         """, unsafe_allow_html=True)
 
     else:
+
         st.markdown("""
         <div class="status-box status-idle">
             📍 지도를 클릭하거나<br>
@@ -496,55 +569,34 @@ with left_col:
         """, unsafe_allow_html=True)
 
     if st.button("↺ 초기화", use_container_width=True):
+
         reset_location()
+
         st.rerun()
 
-    if st.session_state.results:
-        st.markdown('<div class="section-title">🏆 최단경로 TOP 3</div>', unsafe_allow_html=True)
-
-        badge_cls = ["b1", "b2", "b3"]
-        card_cls = ["r1", "r2", "r3"]
-
-        for i, r in enumerate(st.session_state.results[:3]):
-            rd = r.get("road_dist")
-            dist_str = f"{rd:,}m" if rd else f"~{r['straight_dist']:,}m"
-            time_str = meters_to_time(rd if rd else r["straight_dist"])
-            cat_color = COLORS.get(r["category"], "#888")
-
-            st.markdown(f"""
-            <div class="rank-card {card_cls[i]}">
-                <div class="rank-badge {badge_cls[i]}">{i + 1}</div>
-                <div style="flex:1;min-width:0">
-                    <div class="rank-name" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
-                        {r['name']}
-                    </div>
-                    <div class="rank-meta">
-                        <span style="color:{cat_color}">{EMOJIS.get(r['category'], '')} {r['category']}</span>
-                    </div>
-                </div>
-                <div class="rank-right">
-                    <div class="rank-dist">{dist_str}</div>
-                    <div class="rank-time">🚶 {time_str}</div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        if len(st.session_state.results) > 3:
-            with st.expander("4~5위 더 보기"):
-                for i, r in enumerate(st.session_state.results[3:5], start=4):
-                    rd = r.get("road_dist")
-                    dist_str = f"{rd:,}m" if rd else f"~{r['straight_dist']:,}m"
-                    time_str = meters_to_time(rd if rd else r["straight_dist"])
-
-                    st.markdown(
-                        f"**{i}위** {r['name']}  \n"
-                        f"{EMOJIS.get(r['category'], '')} {r['category']} · {dist_str} · 🚶 {time_str}"
-                    )
-
+# ─────────────────────────────────────────
+# 지도
+# ─────────────────────────────────────────
 with map_col:
-    center_lat = st.session_state.confirmed_lat or st.session_state.pending_lat or 37.3422
-    center_lon = st.session_state.confirmed_lon or st.session_state.pending_lon or 127.9202
-    zoom = 16 if st.session_state.confirmed_lat or st.session_state.pending_lat else 14
+
+    center_lat = (
+        st.session_state.confirmed_lat
+        or st.session_state.pending_lat
+        or 37.3422
+    )
+
+    center_lon = (
+        st.session_state.confirmed_lon
+        or st.session_state.pending_lon
+        or 127.9202
+    )
+
+    zoom = (
+        16
+        if st.session_state.confirmed_lat
+        or st.session_state.pending_lat
+        else 14
+    )
 
     m = folium.Map(
         location=[center_lat, center_lon],
@@ -552,7 +604,9 @@ with map_col:
         tiles="CartoDB positron",
     )
 
+    # 시설 마커
     for fac in facilities:
+
         if fac["category"] not in selected_cats:
             continue
 
@@ -573,118 +627,14 @@ with map_col:
             ),
         ).add_to(m)
 
-    if st.session_state.confirmed_lat:
-        clat = st.session_state.confirmed_lat
-        clon = st.session_state.confirmed_lon
+    # 선택 위치
+    if st.session_state.pending_lat:
 
-        folium.Marker(
-            [clat, clon],
-            popup="✅ 확정 위치",
-            icon=folium.Icon(color="red", icon="home", prefix="fa"),
-        ).add_to(m)
-
-        folium.Circle(
-            [clat, clon],
-            radius=radius,
-            color="#4361ee",
-            weight=1.5,
-            fill=True,
-            fill_opacity=0.05,
-        ).add_to(m)
-
-        if not st.session_state.results:
-            with st.spinner("🔍 도로망 기반 최단경로 계산 중…"):
-                G = load_graph()
-
-                nearby = []
-
-                for fac in facilities:
-                    if fac["category"] not in selected_cats:
-                        continue
-
-                    sd = haversine(clat, clon, fac["lat"], fac["lon"])
-
-                    if sd <= radius:
-                        nearby.append({
-                            **fac,
-                            "straight_dist": round(sd)
-                        })
-
-                nearby.sort(key=lambda x: x["straight_dist"])
-
-                results = []
-
-                for fac in nearby[:10]:
-                    coords, road_dist = road_shortest_path(
-                        G,
-                        clat,
-                        clon,
-                        fac["lat"],
-                        fac["lon"]
-                    )
-
-                    results.append({
-                        **fac,
-                        "path_coords": coords,
-                        "road_dist": road_dist
-                    })
-
-                results.sort(
-                    key=lambda x: x["road_dist"] if x["road_dist"] else x["straight_dist"]
-                )
-
-                st.session_state.results = results
-                st.rerun()
-
-        path_colors = ["#ef4444", "#f97316", "#eab308", "#22c55e", "#3b82f6"]
-        label_map = {
-            0: "🥇",
-            1: "🥈",
-            2: "🥉",
-            3: "4위",
-            4: "5위"
-        }
-
-        for i, r in enumerate(st.session_state.results[:5]):
-            pc = path_colors[i]
-            label = label_map.get(i, "")
-            rd = r.get("road_dist")
-            time_str = meters_to_time(rd if rd else r["straight_dist"])
-
-            if r.get("path_coords"):
-                folium.PolyLine(
-                    r["path_coords"],
-                    color=pc,
-                    weight=6 if i == 0 else 4,
-                    opacity=1.0 if i == 0 else 0.65,
-                    dash_array=None if i == 0 else "7 5",
-                    tooltip=f"{label} {r['name']} · {rd}m · 🚶 {time_str}",
-                ).add_to(m)
-
-            fac_color = COLORS.get(r["category"], "#888")
-            road_text = f"{rd}m" if rd else "계산 실패"
-
-            folium.CircleMarker(
-                [r["lat"], r["lon"]],
-                radius=11,
-                color=pc,
-                fill=True,
-                fill_color=fac_color,
-                fill_opacity=1,
-                weight=3,
-                popup=folium.Popup(
-                    f"<b>{label} {r['name']}</b><br>"
-                    f"{EMOJIS.get(r['category'], '')} {r['category']}<br>"
-                    f"🛣️ 도로거리: {road_text}<br>"
-                    f"🚶 도보: {time_str}<br>"
-                    f"📏 직선: {r['straight_dist']}m",
-                    max_width=220
-                ),
-            ).add_to(m)
-
-    elif st.session_state.pending_lat:
         folium.CircleMarker(
-            [st.session_state.pending_lat, st.session_state.pending_lon],
+            [
+                st.session_state.pending_lat,
+                st.session_state.pending_lon
+            ],
             radius=10,
             color="#4361ee",
             fill=True,
@@ -704,8 +654,11 @@ with map_col:
         key="main_map",
     )
 
+    # 지도 클릭
     if map_data and map_data.get("last_clicked"):
+
         clicked = map_data["last_clicked"]
+
         new_lat = round(clicked["lat"], 6)
         new_lon = round(clicked["lng"], 6)
 
@@ -715,13 +668,21 @@ with map_col:
         )
 
         if can_select_location:
+
             st.session_state.pending_lat = new_lat
             st.session_state.pending_lon = new_lon
             st.session_state.results = []
+
             st.rerun()
 
-    if st.session_state.pending_lat and not st.session_state.confirmed_lat:
+    # 위치 확정
+    if (
+        st.session_state.pending_lat
+        and not st.session_state.confirmed_lat
+    ):
+
         st.markdown("### 📍 선택한 위치")
+
         st.write(
             f"위도 {st.session_state.pending_lat:.5f}, "
             f"경도 {st.session_state.pending_lon:.5f}"
@@ -733,22 +694,15 @@ with map_col:
             type="primary",
             key="confirm_bottom"
         ):
-            st.session_state.confirmed_lat = st.session_state.pending_lat
-            st.session_state.confirmed_lon = st.session_state.pending_lon
+
+            st.session_state.confirmed_lat = (
+                st.session_state.pending_lat
+            )
+
+            st.session_state.confirmed_lon = (
+                st.session_state.pending_lon
+            )
+
             st.session_state.results = []
+
             st.rerun()
-
-    if st.button("↺ 위치 다시 선택하기", use_container_width=True, key="reset_bottom"):
-        reset_location()
-        st.rerun()
-
-    legend_html = " &nbsp;·&nbsp; ".join(
-        f"<span style='color:{COLORS[c]};font-weight:600'>{EMOJIS[c]} {c}</span>"
-        for c in ALL_CATS
-        if c in selected_cats
-    )
-
-    st.markdown(
-        f"<div style='margin-top:6px;font-size:12px'>{legend_html}</div>",
-        unsafe_allow_html=True
-    )
