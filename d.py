@@ -6,9 +6,6 @@ from streamlit_folium import st_folium
 import osmnx as ox
 import networkx as nx
 
-# ─────────────────────────────────────────
-# 페이지 설정
-# ─────────────────────────────────────────
 st.set_page_config(
     page_title="원주 생활 인프라 탐색",
     page_icon="🗺️",
@@ -88,7 +85,10 @@ div[data-testid="stButton"] > button {
     font-weight: 600;
 }
 
-/* 모바일 화면 최적화 */
+div[data-testid="stPills"] {
+    gap: 6px;
+}
+
 @media (max-width: 768px) {
     .block-container {
         padding-left: 0.7rem;
@@ -111,9 +111,6 @@ div[data-testid="stButton"] > button {
 </style>
 """, unsafe_allow_html=True)
 
-# ─────────────────────────────────────────
-# 상수
-# ─────────────────────────────────────────
 CATEGORY_MAP = {
     "hospital": "의료", "clinic": "의료",
     "townhall": "행정", "government": "행정",
@@ -139,7 +136,6 @@ EMOJIS = {
 }
 
 ALL_CATS = ["의료", "행정", "교육", "공공시설", "안전"]
-
 WALK_SPEED = 80
 
 
@@ -148,9 +144,14 @@ def meters_to_time(m):
     return f"약 {mins}분"
 
 
-# ─────────────────────────────────────────
-# 세션 초기화
-# ─────────────────────────────────────────
+def is_mobile_device():
+    try:
+        ua = st.context.headers.get("User-Agent", "").lower()
+        return "mobile" in ua or "android" in ua or "iphone" in ua
+    except Exception:
+        return False
+
+
 def init_session():
     defaults = {
         "confirmed_lat": None,
@@ -160,6 +161,7 @@ def init_session():
         "results": [],
         "active_cats": set(ALL_CATS),
     }
+
     for k, v in defaults.items():
         if k not in st.session_state:
             st.session_state[k] = v
@@ -167,9 +169,7 @@ def init_session():
 
 init_session()
 
-# ─────────────────────────────────────────
-# 데이터 로딩
-# ─────────────────────────────────────────
+
 @st.cache_data
 def load_facilities():
     with open("data.geojson", encoding="utf-8") as f:
@@ -240,9 +240,6 @@ def load_graph():
         return G
 
 
-# ─────────────────────────────────────────
-# 유틸
-# ─────────────────────────────────────────
 def haversine(lat1, lon1, lat2, lon2):
     R = 6371000
 
@@ -281,62 +278,34 @@ def road_shortest_path(G, olat, olon, dlat, dlon):
 
         return coords, round(dist)
 
-    except Exception as e:
-        st.warning(f"경로 계산 실패: {e}")
+    except Exception:
         return None, None
 
 
 facilities = load_facilities()
 
-# ─────────────────────────────────────────
-# 레이아웃
-# ─────────────────────────────────────────
 left_col, map_col = st.columns([1, 2.8])
 
-# ════════════════════════════════════════
-# 왼쪽 패널
-# ════════════════════════════════════════
 with left_col:
     st.markdown("## 🗺️ 인프라 탐색")
 
     st.markdown('<div class="section-title">카테고리</div>', unsafe_allow_html=True)
 
-    for cat in ALL_CATS:
-        col_btn, col_lbl = st.columns([1, 3])
-        color = COLORS[cat]
-        active = cat in st.session_state.active_cats
+    selected_list = st.pills(
+        "카테고리",
+        options=ALL_CATS,
+        default=list(st.session_state.active_cats),
+        selection_mode="multi",
+        format_func=lambda c: f"{EMOJIS[c]} {c}",
+        label_visibility="collapsed",
+    )
 
-        with col_btn:
-            if st.button(
-                "ON" if active else "OFF",
-                key=f"cat_{cat}",
-                help=f"{cat} {'비활성화' if active else '활성화'}",
-            ):
-                cats = st.session_state.active_cats
+    selected_cats = set(selected_list)
 
-                if cat in cats:
-                    cats.discard(cat)
-                else:
-                    cats.add(cat)
-
-                st.session_state.active_cats = cats
-                st.session_state.results = []
-                st.rerun()
-
-        with col_lbl:
-            dot_color = color if active else "#d1d5db"
-
-            st.markdown(
-                f"""
-                <div style='display:flex;align-items:center;gap:7px;height:38px;opacity:{'1' if active else '0.4'};'>
-                    <span style='width:10px;height:10px;border-radius:50%;background:{dot_color};flex-shrink:0;display:inline-block'></span>
-                    <span style='font-size:13px;font-weight:600;color:#374151'>{EMOJIS[cat]} {cat}</span>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
-    selected_cats = st.session_state.active_cats
+    if selected_cats != st.session_state.active_cats:
+        st.session_state.active_cats = selected_cats
+        st.session_state.results = []
+        st.rerun()
 
     st.markdown('<div class="section-title">탐색 반경</div>', unsafe_allow_html=True)
 
@@ -369,22 +338,17 @@ with left_col:
             🔵 <b>클릭한 위치</b><br>
             위도 {st.session_state.pending_lat:.5f}<br>
             경도 {st.session_state.pending_lon:.5f}<br>
-            <span style="font-size:12px">확정 버튼을 눌러주세요</span>
+            <span style="font-size:12px">지도 아래 확정 버튼을 눌러주세요</span>
         </div>
         """, unsafe_allow_html=True)
-
-        if st.button("✅ 이 위치로 확정", use_container_width=True, type="primary"):
-            st.session_state.confirmed_lat = st.session_state.pending_lat
-            st.session_state.confirmed_lon = st.session_state.pending_lon
-            st.session_state.results = []
-            st.rerun()
 
     elif st.session_state.confirmed_lat:
         st.markdown(f"""
         <div class="status-box status-done">
             ✅ <b>확정 위치</b><br>
             위도 {st.session_state.confirmed_lat:.5f}<br>
-            경도 {st.session_state.confirmed_lon:.5f}
+            경도 {st.session_state.confirmed_lon:.5f}<br>
+            <span style="font-size:12px">다시 선택하려면 초기화를 눌러주세요</span>
         </div>
         """, unsafe_allow_html=True)
 
@@ -445,9 +409,6 @@ with left_col:
                         f"{EMOJIS.get(r['category'], '')} {r['category']} · {dist_str} · 🚶 {time_str}"
                     )
 
-# ════════════════════════════════════════
-# 오른쪽 지도
-# ════════════════════════════════════════
 with map_col:
     center_lat = st.session_state.confirmed_lat or st.session_state.pending_lat or 37.3422
     center_lon = st.session_state.confirmed_lon or st.session_state.pending_lon or 127.9202
@@ -459,7 +420,6 @@ with map_col:
         tiles="CartoDB positron",
     )
 
-    # 배경 시설 마커
     for fac in facilities:
         if fac["category"] not in selected_cats:
             continue
@@ -481,7 +441,6 @@ with map_col:
             ),
         ).add_to(m)
 
-    # 확정 위치가 있을 때
     if st.session_state.confirmed_lat:
         clat = st.session_state.confirmed_lat
         clon = st.session_state.confirmed_lon
@@ -501,7 +460,6 @@ with map_col:
             fill_opacity=0.05,
         ).add_to(m)
 
-        # 경로 계산
         if not st.session_state.results:
             with st.spinner("🔍 도로망 기반 최단경로 계산 중…"):
                 G = load_graph()
@@ -546,7 +504,6 @@ with map_col:
                 st.session_state.results = results
                 st.rerun()
 
-        # 경로 그리기
         path_colors = ["#ef4444", "#f97316", "#eab308", "#22c55e", "#3b82f6"]
         label_map = {
             0: "🥇",
@@ -573,7 +530,6 @@ with map_col:
                 ).add_to(m)
 
             fac_color = COLORS.get(r["category"], "#888")
-
             road_text = f"{rd}m" if rd else "계산 실패"
 
             folium.CircleMarker(
@@ -594,7 +550,6 @@ with map_col:
                 ),
             ).add_to(m)
 
-    # 확정 전 클릭 위치 표시
     elif st.session_state.pending_lat:
         folium.CircleMarker(
             [st.session_state.pending_lat, st.session_state.pending_lon],
@@ -607,33 +562,32 @@ with map_col:
             popup="📍 클릭한 위치",
         ).add_to(m)
 
-    # 지도 렌더링
+    map_height = 520 if is_mobile_device() else 680
+
     map_data = st_folium(
         m,
         width="100%",
-        height=520,
+        height=map_height,
         returned_objects=["last_clicked"],
         key="main_map",
     )
 
-    # 클릭 감지
     if map_data and map_data.get("last_clicked"):
         clicked = map_data["last_clicked"]
         new_lat = round(clicked["lat"], 6)
         new_lon = round(clicked["lng"], 6)
 
-        if (
-            new_lat != st.session_state.pending_lat
-            or new_lon != st.session_state.pending_lon
-        ):
+        can_select_location = (
+            st.session_state.pending_lat is None
+            and st.session_state.confirmed_lat is None
+        )
+
+        if can_select_location:
             st.session_state.pending_lat = new_lat
             st.session_state.pending_lon = new_lon
-            st.session_state.confirmed_lat = None
-            st.session_state.confirmed_lon = None
             st.session_state.results = []
             st.rerun()
 
-    # 모바일용 지도 아래 확정 버튼
     if st.session_state.pending_lat and not st.session_state.confirmed_lat:
         st.markdown("### 📍 선택한 위치")
         st.write(
@@ -652,7 +606,6 @@ with map_col:
             st.session_state.results = []
             st.rerun()
 
-    # 모바일용 초기화 버튼
     if st.button("↺ 위치 다시 선택하기", use_container_width=True, key="reset_bottom"):
         st.session_state.confirmed_lat = None
         st.session_state.confirmed_lon = None
@@ -661,7 +614,6 @@ with map_col:
         st.session_state.results = []
         st.rerun()
 
-    # 범례
     legend_html = " &nbsp;·&nbsp; ".join(
         f"<span style='color:{COLORS[c]};font-weight:600'>{EMOJIS[c]} {c}</span>"
         for c in ALL_CATS
