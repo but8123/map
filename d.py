@@ -1,5 +1,6 @@
 import json
 import math
+import urllib.parse
 import streamlit as st
 import folium
 from streamlit_folium import st_folium
@@ -13,6 +14,47 @@ st.set_page_config(
     layout="wide"
 )
 
+# ─────────────────────────────────────────
+# 상수
+# ─────────────────────────────────────────
+CATEGORY_MAP = {
+    "hospital": "의료", "clinic": "의료",
+    "townhall": "행정", "government": "행정",
+    "school": "교육", "university": "교육", "college": "교육",
+    "library": "공공시설", "park": "공공시설", "sports_centre": "공공시설",
+    "police": "안전", "fire_station": "안전",
+}
+
+COLORS = {
+    "의료": "#3b82f6",
+    "행정": "#a855f7",
+    "교육": "#f97316",
+    "공공시설": "#22c55e",
+    "안전": "#ef4444",
+}
+
+LIGHT_COLORS = {
+    "의료": "#dbeafe",
+    "행정": "#f3e8ff",
+    "교육": "#ffedd5",
+    "공공시설": "#dcfce7",
+    "안전": "#fee2e2",
+}
+
+EMOJIS = {
+    "의료": "🏥",
+    "행정": "🏛️",
+    "교육": "🏫",
+    "공공시설": "🏟️",
+    "안전": "🚒"
+}
+
+ALL_CATS = ["의료", "행정", "교육", "공공시설", "안전"]
+WALK_SPEED = 80
+
+# ─────────────────────────────────────────
+# CSS
+# ─────────────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap');
@@ -42,6 +84,38 @@ section[data-testid="column"]:first-child > div {
 .status-idle    { background:#f1f5f9; color:#64748b; border:1px dashed #cbd5e1; }
 .status-pending { background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; }
 .status-done    { background:#f0fdf4; color:#166534; border:1px solid #bbf7d0; }
+
+.section-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: #9ca3af;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin: 18px 0 8px 2px;
+}
+
+.category-wrap {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.category-btn {
+    display: inline-block;
+    padding: 8px 15px;
+    border-radius: 999px;
+    font-size: 14px;
+    font-weight: 700;
+    text-decoration: none !important;
+    border: 1.7px solid;
+    transition: all 0.15s ease;
+}
+
+.category-btn:hover {
+    transform: translateY(-1px);
+    filter: brightness(0.98);
+}
 
 .rank-card {
     background: white;
@@ -82,15 +156,6 @@ section[data-testid="column"]:first-child > div {
 .rank-dist  { font-size:16px; font-weight:700; color:#4361ee; }
 .rank-time  { font-size:11px; color:#9ca3af; }
 
-.section-title {
-    font-size: 12px;
-    font-weight: 700;
-    color: #9ca3af;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    margin: 18px 0 8px 2px;
-}
-
 div[data-testid="stButton"] > button {
     border-radius: 10px;
     font-family: 'Noto Sans KR', sans-serif;
@@ -108,62 +173,13 @@ div[data-testid="stButton"] > button {
         padding: 2px;
     }
 
-    .rank-card {
-        padding: 10px 11px;
+    .category-wrap {
+        gap: 7px;
     }
 
-    .rank-dist {
-        font-size: 14px;
-    }
-}
-
-/* pills 버튼 색상 */
-button[data-baseweb="tag"] {
-    border-radius: 999px !important;
-    font-weight: 700 !important;
-    border: none !important;
-    padding: 0.3rem 0.8rem !important;
-}
-
-/* 의료 */
-button[data-baseweb="tag"]:nth-child(1) {
-    background-color: #dbeafe !important;
-    color: #2563eb !important;
-}
-
-/* 행정 */
-button[data-baseweb="tag"]:nth-child(2) {
-    background-color: #f3e8ff !important;
-    color: #9333ea !important;
-}
-
-/* 교육 */
-button[data-baseweb="tag"]:nth-child(3) {
-    background-color: #ffedd5 !important;
-    color: #ea580c !important;
-}
-
-/* 공공시설 */
-button[data-baseweb="tag"]:nth-child(4) {
-    background-color: #dcfce7 !important;
-    color: #16a34a !important;
-}
-
-/* 안전 */
-button[data-baseweb="tag"]:nth-child(5) {
-    background-color: #fee2e2 !important;
-    color: #dc2626 !important;
-}
-
-@media (max-width: 768px) {
-    .block-container {
-        padding-left: 0.7rem;
-        padding-right: 0.7rem;
-        padding-top: 0.8rem;
-    }
-
-    section[data-testid="column"]:first-child > div {
-        padding: 2px;
+    .category-btn {
+        padding: 7px 13px;
+        font-size: 13px;
     }
 
     .rank-card {
@@ -177,35 +193,9 @@ button[data-baseweb="tag"]:nth-child(5) {
 </style>
 """, unsafe_allow_html=True)
 
-
-CATEGORY_MAP = {
-    "hospital": "의료", "clinic": "의료",
-    "townhall": "행정", "government": "행정",
-    "school": "교육", "university": "교육", "college": "교육",
-    "library": "공공시설", "park": "공공시설", "sports_centre": "공공시설",
-    "police": "안전", "fire_station": "안전",
-}
-
-COLORS = {
-    "의료": "#3b82f6",
-    "행정": "#a855f7",
-    "교육": "#f97316",
-    "공공시설": "#22c55e",
-    "안전": "#ef4444",
-}
-
-EMOJIS = {
-    "의료": "🏥",
-    "행정": "🏛️",
-    "교육": "🏫",
-    "공공시설": "🏟️",
-    "안전": "🚒"
-}
-
-ALL_CATS = ["의료", "행정", "교육", "공공시설", "안전"]
-WALK_SPEED = 80
-
-
+# ─────────────────────────────────────────
+# 함수
+# ─────────────────────────────────────────
 def meters_to_time(m):
     mins = max(1, round(m / WALK_SPEED))
     return f"약 {mins}분"
@@ -235,6 +225,22 @@ def init_session():
 
 
 init_session()
+
+
+# 카테고리 버튼 클릭 처리
+if "cat" in st.query_params:
+    cat = st.query_params["cat"]
+
+    if cat in ALL_CATS:
+        if cat in st.session_state.active_cats:
+            st.session_state.active_cats.remove(cat)
+        else:
+            st.session_state.active_cats.add(cat)
+
+        st.session_state.results = []
+
+    st.query_params.clear()
+    st.rerun()
 
 
 @st.cache_data
@@ -358,6 +364,48 @@ def reset_location():
     st.session_state.results = []
 
 
+def render_category_buttons():
+    html = '<div class="category-wrap">'
+
+    for cat in ALL_CATS:
+        active = cat in st.session_state.active_cats
+        color = COLORS[cat]
+        light = LIGHT_COLORS[cat]
+
+        if active:
+            bg = light
+            text_color = color
+            border = color
+            opacity = "1"
+        else:
+            bg = "#f3f4f6"
+            text_color = "#9ca3af"
+            border = "#d1d5db"
+            opacity = "0.65"
+
+        encoded_cat = urllib.parse.quote(cat)
+
+        html += f"""
+        <a class="category-btn"
+           href="?cat={encoded_cat}"
+           style="
+               background:{bg};
+               color:{text_color};
+               border-color:{border};
+               opacity:{opacity};
+           ">
+           {EMOJIS[cat]} {cat}
+        </a>
+        """
+
+    html += "</div>"
+
+    st.markdown(html, unsafe_allow_html=True)
+
+
+# ─────────────────────────────────────────
+# 메인
+# ─────────────────────────────────────────
 facilities = load_facilities()
 
 left_col, map_col = st.columns([1, 2.8])
@@ -366,22 +414,9 @@ with left_col:
     st.markdown("## 🗺️ 인프라 탐색")
 
     st.markdown('<div class="section-title">카테고리</div>', unsafe_allow_html=True)
+    render_category_buttons()
 
-    selected_list = st.pills(
-        "카테고리",
-        options=ALL_CATS,
-        default=list(st.session_state.active_cats),
-        selection_mode="multi",
-        format_func=lambda c: f"{EMOJIS[c]} {c}",
-        label_visibility="collapsed",
-    )
-
-    selected_cats = set(selected_list)
-
-    if selected_cats != st.session_state.active_cats:
-        st.session_state.active_cats = selected_cats
-        st.session_state.results = []
-        st.rerun()
+    selected_cats = st.session_state.active_cats
 
     st.markdown('<div class="section-title">탐색 반경</div>', unsafe_allow_html=True)
 
@@ -424,7 +459,6 @@ with left_col:
                 st.rerun()
             else:
                 st.warning("위치 정보를 가져오지 못했습니다. 브라우저 위치 권한을 허용해주세요.")
-
     else:
         st.button(
             "📱 현재 내 위치 사용",
