@@ -3,6 +3,7 @@ import math
 import streamlit as st
 import folium
 from streamlit_folium import st_folium
+from streamlit_js_eval import get_geolocation
 import osmnx as ox
 import networkx as nx
 
@@ -37,6 +38,7 @@ section[data-testid="column"]:first-child > div {
     font-size: 13px;
     line-height: 1.7;
 }
+
 .status-idle    { background:#f1f5f9; color:#64748b; border:1px dashed #cbd5e1; }
 .status-pending { background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; }
 .status-done    { background:#f0fdf4; color:#166534; border:1px solid #bbf7d0; }
@@ -52,17 +54,27 @@ section[data-testid="column"]:first-child > div {
     box-shadow: 0 1px 4px rgba(0,0,0,0.07);
     border-left: 4px solid #e5e7eb;
 }
+
 .rank-card.r1 { border-left-color: #f59e0b; }
 .rank-card.r2 { border-left-color: #94a3b8; }
 .rank-card.r3 { border-left-color: #92400e; }
 
 .rank-badge {
-    width:28px; height:28px;
+    width:28px;
+    height:28px;
     border-radius:50%;
-    display:flex; align-items:center; justify-content:center;
-    font-size:13px; font-weight:700; color:white; flex-shrink:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:13px;
+    font-weight:700;
+    color:white;
+    flex-shrink:0;
 }
-.b1{background:#f59e0b;} .b2{background:#94a3b8;} .b3{background:#92400e;}
+
+.b1{background:#f59e0b;}
+.b2{background:#94a3b8;}
+.b3{background:#92400e;}
 
 .rank-name  { font-size:13px; font-weight:700; color:#111827; }
 .rank-meta  { font-size:11px; color:#9ca3af; margin-top:1px; }
@@ -83,10 +95,6 @@ div[data-testid="stButton"] > button {
     border-radius: 10px;
     font-family: 'Noto Sans KR', sans-serif;
     font-weight: 600;
-}
-
-div[data-testid="stPills"] {
-    gap: 6px;
 }
 
 @media (max-width: 768px) {
@@ -185,6 +193,7 @@ def load_facilities():
 
         for key in ["amenity", "leisure", "office", "building"]:
             v = props.get(key, "")
+
             if v in CATEGORY_MAP:
                 category = CATEGORY_MAP[v]
                 break
@@ -282,6 +291,14 @@ def road_shortest_path(G, olat, olon, dlat, dlon):
         return None, None
 
 
+def reset_location():
+    st.session_state.confirmed_lat = None
+    st.session_state.confirmed_lon = None
+    st.session_state.pending_lat = None
+    st.session_state.pending_lon = None
+    st.session_state.results = []
+
+
 facilities = load_facilities()
 
 left_col, map_col = st.columns([1, 2.8])
@@ -332,10 +349,35 @@ with left_col:
 
     st.markdown('<div class="section-title">위치</div>', unsafe_allow_html=True)
 
+    can_select_location = (
+        st.session_state.pending_lat is None
+        and st.session_state.confirmed_lat is None
+    )
+
+    if can_select_location:
+        if st.button("📱 현재 내 위치 사용", use_container_width=True, type="primary"):
+            loc = get_geolocation()
+
+            if loc and "coords" in loc:
+                st.session_state.pending_lat = round(loc["coords"]["latitude"], 6)
+                st.session_state.pending_lon = round(loc["coords"]["longitude"], 6)
+                st.session_state.results = []
+                st.rerun()
+            else:
+                st.warning("위치 정보를 가져오지 못했습니다. 브라우저 위치 권한을 허용해주세요.")
+
+    else:
+        st.button(
+            "📱 현재 내 위치 사용",
+            use_container_width=True,
+            disabled=True,
+            help="다시 선택하려면 초기화를 눌러주세요."
+        )
+
     if st.session_state.pending_lat and not st.session_state.confirmed_lat:
         st.markdown(f"""
         <div class="status-box status-pending">
-            🔵 <b>클릭한 위치</b><br>
+            🔵 <b>선택한 위치</b><br>
             위도 {st.session_state.pending_lat:.5f}<br>
             경도 {st.session_state.pending_lon:.5f}<br>
             <span style="font-size:12px">지도 아래 확정 버튼을 눌러주세요</span>
@@ -355,16 +397,13 @@ with left_col:
     else:
         st.markdown("""
         <div class="status-box status-idle">
-            📍 지도를 클릭해<br>위치를 선택하세요
+            📍 지도를 클릭하거나<br>
+            현재 내 위치를 사용하세요
         </div>
         """, unsafe_allow_html=True)
 
     if st.button("↺ 초기화", use_container_width=True):
-        st.session_state.confirmed_lat = None
-        st.session_state.confirmed_lon = None
-        st.session_state.pending_lat = None
-        st.session_state.pending_lon = None
-        st.session_state.results = []
+        reset_location()
         st.rerun()
 
     if st.session_state.results:
@@ -412,7 +451,7 @@ with left_col:
 with map_col:
     center_lat = st.session_state.confirmed_lat or st.session_state.pending_lat or 37.3422
     center_lon = st.session_state.confirmed_lon or st.session_state.pending_lon or 127.9202
-    zoom = 15 if st.session_state.confirmed_lat or st.session_state.pending_lat else 14
+    zoom = 16 if st.session_state.confirmed_lat or st.session_state.pending_lat else 14
 
     m = folium.Map(
         location=[center_lat, center_lon],
@@ -559,7 +598,7 @@ with map_col:
             fill_color="white",
             fill_opacity=1,
             weight=3,
-            popup="📍 클릭한 위치",
+            popup="📍 선택한 위치",
         ).add_to(m)
 
     map_height = 520 if is_mobile_device() else 680
@@ -607,11 +646,7 @@ with map_col:
             st.rerun()
 
     if st.button("↺ 위치 다시 선택하기", use_container_width=True, key="reset_bottom"):
-        st.session_state.confirmed_lat = None
-        st.session_state.confirmed_lon = None
-        st.session_state.pending_lat = None
-        st.session_state.pending_lon = None
-        st.session_state.results = []
+        reset_location()
         st.rerun()
 
     legend_html = " &nbsp;·&nbsp; ".join(
