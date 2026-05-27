@@ -626,9 +626,129 @@ with map_col:
                 max_width=180
             ),
         ).add_to(m)
+        # 확정 위치가 있을 때 경로 계산 및 표시
+    if st.session_state.confirmed_lat:
 
-    # 선택 위치
-    if st.session_state.pending_lat:
+        clat = st.session_state.confirmed_lat
+        clon = st.session_state.confirmed_lon
+
+        folium.Marker(
+            [clat, clon],
+            popup="✅ 확정 위치",
+            icon=folium.Icon(color="red", icon="home", prefix="fa"),
+        ).add_to(m)
+
+        folium.Circle(
+            [clat, clon],
+            radius=radius,
+            color="#4361ee",
+            weight=1.5,
+            fill=True,
+            fill_opacity=0.05,
+        ).add_to(m)
+
+        if not st.session_state.results:
+
+            with st.spinner("🔍 도로망 기반 최단경로 계산 중…"):
+
+                G = load_graph()
+                nearby = []
+
+                for fac in facilities:
+
+                    if fac["category"] not in selected_cats:
+                        continue
+
+                    sd = haversine(
+                        clat,
+                        clon,
+                        fac["lat"],
+                        fac["lon"]
+                    )
+
+                    if sd <= radius:
+                        nearby.append({
+                            **fac,
+                            "straight_dist": round(sd)
+                        })
+
+                nearby.sort(key=lambda x: x["straight_dist"])
+
+                results = []
+
+                for fac in nearby[:10]:
+
+                    coords, road_dist = road_shortest_path(
+                        G,
+                        clat,
+                        clon,
+                        fac["lat"],
+                        fac["lon"]
+                    )
+
+                    results.append({
+                        **fac,
+                        "path_coords": coords,
+                        "road_dist": road_dist
+                    })
+
+                results.sort(
+                    key=lambda x: x["road_dist"] if x["road_dist"] else x["straight_dist"]
+                )
+
+                st.session_state.results = results
+                st.rerun()
+
+        path_colors = ["#ef4444", "#f97316", "#eab308", "#22c55e", "#3b82f6"]
+        label_map = {
+            0: "🥇",
+            1: "🥈",
+            2: "🥉",
+            3: "4위",
+            4: "5위"
+        }
+
+        for i, r in enumerate(st.session_state.results[:5]):
+
+            pc = path_colors[i]
+            label = label_map.get(i, "")
+            rd = r.get("road_dist")
+            time_str = meters_to_time(rd if rd else r["straight_dist"])
+
+            if r.get("path_coords"):
+
+                folium.PolyLine(
+                    r["path_coords"],
+                    color=pc,
+                    weight=6 if i == 0 else 4,
+                    opacity=1.0 if i == 0 else 0.65,
+                    dash_array=None if i == 0 else "7 5",
+                    tooltip=f"{label} {r['name']} · {rd}m · 🚶 {time_str}",
+                ).add_to(m)
+
+            fac_color = COLORS.get(r["category"], "#888")
+            road_text = f"{rd}m" if rd else "계산 실패"
+
+            folium.CircleMarker(
+                [r["lat"], r["lon"]],
+                radius=11,
+                color=pc,
+                fill=True,
+                fill_color=fac_color,
+                fill_opacity=1,
+                weight=3,
+                popup=folium.Popup(
+                    f"<b>{label} {r['name']}</b><br>"
+                    f"{EMOJIS.get(r['category'], '')} {r['category']}<br>"
+                    f"🛣️ 도로거리: {road_text}<br>"
+                    f"🚶 도보: {time_str}<br>"
+                    f"📏 직선: {r['straight_dist']}m",
+                    max_width=220
+                ),
+            ).add_to(m)
+
+    # 확정 전 선택 위치 표시
+    elif st.session_state.pending_lat:
 
         folium.CircleMarker(
             [
@@ -695,14 +815,11 @@ with map_col:
             key="confirm_bottom"
         ):
 
-            st.session_state.confirmed_lat = (
-                st.session_state.pending_lat
-            )
-
-            st.session_state.confirmed_lon = (
-                st.session_state.pending_lon
-            )
-
+            st.session_state.confirmed_lat = st.session_state.pending_lat
+            st.session_state.confirmed_lon = st.session_state.pending_lon
             st.session_state.results = []
 
             st.rerun()
+        
+
+    
