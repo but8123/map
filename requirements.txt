@@ -4,3 +4,4 @@ streamlit-folium
 osmnx
 networkx
 scikit-learn
+streamlit-js-eval
