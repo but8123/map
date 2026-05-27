@@ -117,6 +117,51 @@ div[data-testid="stButton"] > button {
     }
 }
 </style>
+
+st.markdown("""
+<style>
+
+/* 선택 안된 상태 */
+button[data-baseweb="tag"] {
+    border-radius: 999px !important;
+    font-weight: 700 !important;
+    border: none !important;
+    padding: 0.3rem 0.8rem !important;
+}
+
+/* 의료 */
+button[data-baseweb="tag"]:nth-child(1) {
+    background-color: #dbeafe !important;
+    color: #2563eb !important;
+}
+
+/* 행정 */
+button[data-baseweb="tag"]:nth-child(2) {
+    background-color: #f3e8ff !important;
+    color: #9333ea !important;
+}
+
+/* 교육 */
+button[data-baseweb="tag"]:nth-child(3) {
+    background-color: #ffedd5 !important;
+    color: #ea580c !important;
+}
+
+/* 공공시설 */
+button[data-baseweb="tag"]:nth-child(4) {
+    background-color: #dcfce7 !important;
+    color: #16a34a !important;
+}
+
+/* 안전 */
+button[data-baseweb="tag"]:nth-child(5) {
+    background-color: #fee2e2 !important;
+    color: #dc2626 !important;
+}
+
+</style>
+""", unsafe_allow_html=True)
+
 """, unsafe_allow_html=True)
 
 CATEGORY_MAP = {
